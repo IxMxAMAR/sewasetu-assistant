@@ -1,0 +1,7 @@
+# Pinned deliberately. mcp 2.x renamed FastMCP to MCPServer and changed the auth
+# wiring; a floating version would silently change the OAuth behaviour of a
+# server that is exposed to the internet, which is not a thing to discover in
+# production.
+mcp==2.3.0
+httpx==0.28.1
+PyJWT[crypto]==2.15.1

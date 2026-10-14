@@ -1,0 +1,23 @@
+﻿
+# The Director's note itself is not ours to redistribute. The transcript we worked
+# from is committed at docs/director-note.md.
+DIRECTOR-NOTE.mp3
+
+# Local runtime state
+.env
+*.log
+uploads/
+pgdata/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Eval runs write raw transcripts and DB dumps; keep them out, the dashboard and
+# the committed results summary are the record.
+evals/runs/
+
+# The department's 100k-row snapshot. Fetched from the handout at first boot by
+# deploy/bootstrap.sh; see seed/README.md.
+seed/seed.sql
+

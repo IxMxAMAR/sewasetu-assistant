@@ -1,0 +1,8 @@
+# This repository is developed on Windows and deployed on Linux. Without this,
+# git checks the shell scripts out with CRLF endings and the first line of
+# bootstrap.sh becomes "#!/usr/bin/env bash\r", which bash refuses to run.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary
+*.mp3 binary
