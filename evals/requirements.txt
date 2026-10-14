@@ -1,0 +1,11 @@
+# The evals are a client of the deployment, not part of it: they speak to the
+# two MCP servers over the public HTTPS endpoint, with a token they got by
+# signing in like anybody else. So they pin the MCP SDK the servers use, and add
+# only what a client needs on top: a YAML reader, an HTTP client for the OAuth
+# walk, and psycopg2 so they can read the portal's database afterwards and see
+# what the conversation actually did.
+mcp==2.3.0
+httpx2==2.13.1
+psycopg2-binary==2.9.9
+PyYAML==6.0.2
+requests==2.32.3

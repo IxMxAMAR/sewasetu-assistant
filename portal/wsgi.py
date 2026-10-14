@@ -13,8 +13,10 @@ Run it with:
 
 from app import app          # noqa: F401  (the department's portal, unmodified)
 from api import api
+from evals import evals
 
 app.register_blueprint(api)
+app.register_blueprint(evals)
 
 # `gunicorn wsgi:app` resolves this name.
 application = app

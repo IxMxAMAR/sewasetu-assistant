@@ -147,15 +147,19 @@ su postgres -c "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='sewasetu'\"
     || su postgres -c "createdb -O sewasetu sewasetu"
 
 log "schema"
-su postgres -c "psql -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/portal/schema.sql'"
+# Run as the portal's own role, not as the superuser. The schema used to be
+# applied by postgres, which left every table owned by postgres and the portal
+# unable to write to any of them -- the first symptom was the signing key never
+# getting created, and so a 500 on /.well-known/jwks.json.
+su postgres -c "psql -U sewasetu -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/portal/schema.sql'"
 # Ours, applied after theirs. Idempotent, so it is safe on every run.
-su postgres -c "psql -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/portal/schema_agent.sql'"
+su postgres -c "psql -U sewasetu -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/portal/schema_agent.sql'"
 
-ROWS=$(su postgres -c "psql -tAc 'SELECT count(*) FROM applications' -d sewasetu" | tr -d '[:space:]')
+ROWS=$(su postgres -c "psql -U sewasetu -tAc 'SELECT count(*) FROM applications' -d sewasetu" | tr -d '[:space:]')
 if [ "$ROWS" = "0" ]; then
     log "seed ($(du -h "$APP_DIR/seed/seed.sql" | cut -f1))"
-    su postgres -c "psql -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/seed/seed.sql'"
-    su postgres -c "psql -tAc 'SELECT count(*) FROM applications' -d sewasetu"
+    su postgres -c "psql -U sewasetu -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/seed/seed.sql'"
+    su postgres -c "psql -U sewasetu -tAc 'SELECT count(*) FROM applications' -d sewasetu"
 else
     log "seed skipped: $ROWS applications already present"
 fi
@@ -177,6 +181,16 @@ if [ ! -x "$STATE_DIR/venv-mcp/bin/python" ]; then
 fi
 "$STATE_DIR/venv-mcp/bin/pip" install -q --upgrade pip
 "$STATE_DIR/venv-mcp/bin/pip" install -q -r "$APP_DIR/mcp/requirements.txt"
+
+# The evals are an ordinary client of the deployment, so they get their own
+# environment too and talk to the two MCP servers the same way anybody else's
+# assistant does: over the public HTTPS endpoint, with a token they obtained by
+# signing in.
+if [ ! -x "$STATE_DIR/venv-evals/bin/python" ]; then
+    python3 -m venv "$STATE_DIR/venv-evals"
+fi
+"$STATE_DIR/venv-evals/bin/pip" install -q --upgrade pip
+"$STATE_DIR/venv-evals/bin/pip" install -q -r "$APP_DIR/evals/requirements.txt"
 
 mkdir -p /var/sewasetu
 # Both of these used to end up one level too deep: ln -s into an existing
@@ -242,6 +256,26 @@ autostart=true
 autorestart=true
 $LOGGING
 CONF
+
+# Running the evals is a deliberate act, not something every boot does: they
+# sign in as real people, file real applications and decide real cases, and the
+# database is the record of that. Set RUN_EVALS=1 for a boot and they run once,
+# in the background, after the services are up.
+if [ "${RUN_EVALS:-0}" = "1" ]; then
+    : "${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY to run the evals}"
+    cat >> /etc/supervisor/conf.d/sewasetu.conf <<CONF
+
+[program:evals]
+command=$STATE_DIR/venv-evals/bin/python $APP_DIR/evals/harness/run.py --base-url $PUBLIC_BASE_URL --citizen-mcp $CITIZEN_MCP_URL/mcp --officer-mcp $OFFICER_MCP_URL/mcp --out $APP_DIR/evals/results/latest.json --runs $APP_DIR/evals/runs
+directory=$APP_DIR
+environment=OPENROUTER_API_KEY="$OPENROUTER_API_KEY",EVAL_MODEL="${EVAL_MODEL:-google/gemini-3.1-flash-lite}",EVAL_LLM_BASE="${EVAL_LLM_BASE:-}",ADMIN_USERNAME="$ADMIN_USERNAME",ADMIN_PASSWORD="$ADMIN_PASSWORD",PYTHONPATH="$APP_DIR/evals"
+autostart=true
+autorestart=false
+startsecs=0
+$LOGGING
+CONF
+    echo "evals will run once the services are up"
+fi
 
 # The department's own crontab file, pointed at where the code actually is.
 sed "s#python /app/scripts/deemed_approval.py#$STATE_DIR/venv-portal/bin/python $APP_DIR/portal/scripts/deemed_approval.py#" \

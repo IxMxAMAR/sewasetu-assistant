@@ -88,6 +88,13 @@ ADMIN_PASSWORD=${ADMIN_PASSWORD:-$(head -c 18 /dev/urandom | base64 | tr -d '/+=
 SECRET_KEY=${SECRET_KEY:-$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')}
 
 AGENT_PILOT_BLOCKS=${AGENT_PILOT_BLOCKS:-Sonari,Namti}
+
+# The evals drive a small model as the assistant and another as the citizen.
+# They only run on a boot that asks for them.
+OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+EVAL_MODEL=${EVAL_MODEL:-google/gemini-3.1-flash-lite}
+EVAL_LLM_BASE=${EVAL_LLM_BASE:-}
+RUN_EVALS=${RUN_EVALS:-0}
 ENV
 chmod 600 "$STATE_DIR/pilot.env"
 grep -E 'PUBLIC_BASE_URL|CITIZEN_MCP_URL|OFFICER_MCP_URL|ADMIN_USERNAME|AGENT_PILOT_BLOCKS' \

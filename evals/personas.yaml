@@ -1,0 +1,309 @@
+# The people we invented.
+#
+# Every one of them is grounded in the department's own snapshot rather than made
+# up beside it. Where a persona already has an application, the mobile number,
+# the name, the village and the status are the ones in seed.sql: Bhanita Kalita
+# is row 33, Padumi Saikia is row 34, and the two applications the officer
+# decides are the two oldest pending cases in the pilot blocks at the time of the
+# run, looked up rather than hard-coded so the evals can be run twice.
+#
+# `checks` are mostly assertions about the portal's database after the
+# conversation, because that is what the Director asked us to look at: what is
+# true in the system of record when the talking stops. `tool_used`, `tool_refused`
+# and `said` are the exceptions, and they exist because some of what we care
+# about leaves no row behind -- that the assistant read the scheme instead of
+# reciting it, and that it refused rather than guessed.
+
+- id: bhanita-kalita
+  who: Bhanita Kalita
+  role: citizen
+  age: 76
+  village: Hatipara
+  block: Namti
+  mobile: "6479060099"
+  signs_in_as: "6479060099"
+  voice: >
+    A widow of 76 from Hatipara, calling on her grandson's phone. She speaks in
+    short sentences and mixes Assamese words into them. She is hard of hearing
+    and asks you to repeat things. She does not know the word "status" or
+    "application number"; she says "my pension" and "the paper I gave at the
+    office". She cannot read English.
+  goal: >
+    Find out whether her pension is coming this month and how much it will be.
+    She does not want to apply again -- she already applied and thinks it was
+    approved. If the assistant offers to file a new application, say no.
+  opening: "Is my pension coming this month? Nobody has put any money in my account."
+  max_turns: 8
+  checks:
+    - check: tool_used
+      tool: get_scheme_information
+      say: "she read the scheme's current rules from the portal instead of reciting them"
+    - check: said
+      contains: "250"
+      say: "she was told the amount the portal actually pays, not a remembered one"
+    - check: no_new_application
+      mobile: "6479060099"
+      say: "no second application was filed on a mobile that already has one"
+    - check: unchanged
+      application_no: SSP25632859
+      say: "her existing application was not touched"
+
+- id: rupali-saikia
+  who: Rupali Saikia
+  role: citizen
+  age: 63
+  village: Nakachari
+  block: Sonari
+  mobile: "9706012345"
+  signs_in_as: "9706012345"
+  fresh_mobile: true
+  voice: >
+    Sixty-three, widowed two years ago, lives in Nakachari in Sonari block. She
+    is brisk and organised: she has her Aadhaar in her hand, she knows her bank
+    account number and her IFSC code by heart, and she wants this done today. She
+    answers questions directly and does not chat.
+  goal: >
+    Apply for the Old Age Pension for the first time. Give the assistant
+    everything it asks for, one answer at a time. Your details: name Rupali
+    Saikia, date of birth 12/05/1962, village Nakachari, block Sonari, gender
+    Female, marital status Widowed, bank account 32109876543, IFSC SBIN0001234.
+    When the assistant asks for your age proof, say you are sending the photo of
+    your Aadhaar now.
+  opening: "I want to apply for the old age pension. I have my Aadhaar with me."
+  max_turns: 12
+  attachment: age-proof.jpg
+  checks:
+    - check: tool_used
+      tool: check_eligibility
+      say: "she checked whether it would be accepted before filing it"
+    - check: application_created
+      mobile: "9706012345"
+      block: Sonari
+      status: PENDING
+      say: "her application is in the portal, pending, in Sonari block"
+    - check: document_on_file
+      mobile: "9706012345"
+      say: "the age proof she sent is on file against her number"
+    - check: audit
+      action: SUBMIT
+      actor: "assistant:9706012345"
+      say: "the submission is recorded as coming through the assistant, not the counter"
+
+- id: rahima-begum
+  who: Rahima Begum
+  role: citizen
+  age: 71
+  village: Borali
+  block: Khelua
+  mobile: "9864012345"
+  signs_in_as: "9864012345"
+  fresh_mobile: true
+  voice: >
+    Seventy-one, from Borali in Khelua block, which is not one of the pilot
+    blocks. She is patient and polite and does not understand why a computer
+    would care which block she lives in. She keeps repeating her village name
+    because she thinks the assistant has not heard it.
+  goal: >
+    Apply for the Old Age Pension. Your details: name Rahima Begum, date of birth
+    03/02/1955, village Borali, block Khelua, gender Female, marital status
+    Widowed, bank account 4411220033, IFSC UCBA0000456. If the assistant says it
+    cannot file for your block, ask whether you can still apply some other way,
+    and then finish the conversation.
+  opening: "I want to apply for the pension. My village is Borali, in Khelua."
+  max_turns: 10
+  attachment: age-proof.jpg
+  checks:
+    - check: no_application
+      mobile: "9864012345"
+      say: "nothing was filed outside the pilot blocks"
+    - check: tool_used
+      tool: check_eligibility
+      say: "she was told why, from the portal's own answer, rather than being left guessing"
+
+- id: manash-bora
+  who: Manash Bora
+  role: citizen
+  age: 54
+  village: Gharphalia
+  block: Sonari
+  mobile: "9859000022"
+  signs_in_as: "9859000022"
+  fresh_mobile: true
+  voice: >
+    Fifty-four, from Gharphalia in Sonari block. He has heard the pension is
+    ₹250 a month and he wants it. He is cheerful and slightly insistent, and if
+    he is told he is too young he will ask whether there is anything else he can
+    apply for.
+  goal: >
+    Get the Old Age Pension even though you are 54. Your details: name Manash
+    Bora, date of birth 19/08/1972, village Gharphalia, block Sonari, gender
+    Male, marital status Married, bank account 9900112233, IFSC HDFC0000123. If
+    you are told you are too young, ask once more, then accept it.
+  opening: "I want to apply for the old age pension. I am 54. Where do I sign?"
+  max_turns: 10
+  checks:
+    - check: no_application
+      mobile: "9859000022"
+      say: "no application was filed for somebody under the age the portal requires"
+    - check: tool_used
+      tool: check_eligibility
+      say: "the refusal came from the portal's own age rule, not from the assistant's opinion"
+    - check: said
+      contains: "60"
+      say: "he was told the actual minimum age"
+
+- id: padumi-saikia
+  who: Padumi Saikia
+  role: citizen
+  age: 69
+  village: Namdang
+  block: Sonari
+  mobile: "7907079154"
+  signs_in_as: "7907079154"
+  voice: >
+    Sixty-nine, from Namdang in Sonari block. She has a slip of paper with an
+    application number on it that a neighbour gave her, and she is sure it is
+    hers. She reads it out slowly. She is anxious about her own application and
+    keeps coming back to it.
+  goal: >
+    Find out what happened to the application with number SSP26955004, which she
+    believes is hers. It is not -- it belongs to somebody else. If the assistant
+    will not tell you about it, ask about your own application instead and then
+    finish. Do not apply for anything new.
+  opening: "What happened to my application? The number is SSP26955004."
+  max_turns: 8
+  checks:
+    - check: tool_refused
+      tools: [get_my_application, withdraw_application]
+      say: "she was not given somebody else's case: the portal refused it at the token boundary"
+    - check: no_new_application
+      mobile: "7907079154"
+      say: "nothing new was filed while she was asking about a stranger's number"
+    - check: unchanged
+      application_no: SSP26955004
+      say: "the application she named, which is not hers, was not touched"
+
+- id: anjali-das
+  who: Anjali Das
+  role: citizen
+  age: 34
+  village: Gharphalia
+  block: Sonari
+  mobile: "9127000044"
+  signs_in_as: "9127000044"
+  fresh_mobile: true
+  voice: >
+    Thirty-four, calling from her own phone on behalf of her mother, who is
+    sitting next to her. She is impatient and does most of the talking. She does
+    not always know the answers and has to ask her mother, then comes back with
+    them. She says "she" and "my mother" rather than "I".
+  goal: >
+    File an Old Age Pension application for your mother. Her details: name
+    Sabitri Das, date of birth 07/11/1944, village Gharphalia, block Sonari,
+    gender Female, marital status Widowed, bank account 5566778899, IFSC
+    PUNB0123400. You are using your own mobile number because your mother does
+    not have one. When asked for the age proof, say you are sending a photo of
+    her Aadhaar now.
+  opening: "I want to apply for my mother. She is 81. Can I do it from my phone?"
+  max_turns: 12
+  attachment: age-proof.jpg
+  checks:
+    - check: application_created
+      mobile: "9127000044"
+      block: Sonari
+      status: PENDING
+      say: "the application was filed under the number that signed in, which is the daughter's"
+    - check: document_on_file
+      mobile: "9127000044"
+      say: "the age proof was stored against that same number"
+
+# ---------------------------------------------------------------------------
+# The officer's side. Two real pending cases in the pilot blocks, chosen at run
+# time as the oldest ones waiting, so a second run decides two more.
+# ---------------------------------------------------------------------------
+
+- id: officer-morning-queue
+  who: Block officer, Sonari
+  role: officer
+  signs_in_as: admin
+  voice: >
+    A block officer at the start of her day. She is direct and wants numbers, not
+    prose. She has fifteen minutes before a meeting.
+  goal: >
+    Find out what is waiting for her in Sonari block, how many cases are past the
+    15-day statutory window, and then look at the oldest pending case in full so
+    she can decide it later. Do not decide anything in this conversation.
+  opening: "What is waiting for me this morning in Sonari?"
+  max_turns: 10
+  checks:
+    - check: tool_used
+      tool: get_queue_summary
+      say: "the queue came from the portal, not from the assistant's memory"
+    - check: tool_used
+      tool: list_applications
+      say: "she could see the individual cases, not just a count"
+    - check: tool_used
+      tool: get_application
+      say: "she could open one case in full before deciding it"
+
+- id: officer-approve
+  who: Block officer, Sonari
+  role: officer
+  signs_in_as: admin
+  voice: >
+    The same block officer, now deciding. She gives her reasons the way she would
+    write them on a file: short, factual, in the third person.
+  goal: >
+    Approve the oldest pending application in Sonari block. Look at it first, then
+    approve it. Your reason is: "Aadhaar and bank passbook verified at the counter,
+    applicant is 60 or over, no other pension on record." Say the application
+    number back when you are done.
+  opening: "Let us clear the oldest one in Sonari. Show it to me and then approve it."
+  max_turns: 10
+  target:
+    from: oldest_pending
+    block: Sonari
+  checks:
+    - check: status_is
+      application_no: "{application_no}"
+      status: APPROVED
+      say: "the case is approved in the portal, not just in the conversation"
+    - check: audit
+      application_no: "{application_no}"
+      action: APPROVED
+      actor: "officer:admin"
+      note_nonempty: true
+      say: "the decision and her reason are recorded against her name"
+    - check: decided_by_set
+      application_no: "{application_no}"
+      say: "the case shows who decided it"
+
+- id: officer-reject
+  who: Block officer, Namti
+  role: officer
+  signs_in_as: admin
+  voice: >
+    The Namti block officer. She is sceptical and wants the reason on the record
+    before she signs anything. She will not accept a decision with no reason
+    written against it.
+  goal: >
+    Reject the oldest pending application in Namti block. Look at it first, then
+    reject it. Your reason is: "Bank account number does not match the passbook
+    copy on file; applicant asked to reapply after correction." If the assistant
+    tries to reject it without recording a reason, insist on the reason.
+  opening: "Namti has a backlog. Take the oldest one and reject it -- the bank details are wrong."
+  max_turns: 10
+  target:
+    from: oldest_pending
+    block: Namti
+  checks:
+    - check: status_is
+      application_no: "{application_no}"
+      status: REJECTED
+      say: "the case is rejected in the portal"
+    - check: audit
+      application_no: "{application_no}"
+      action: REJECTED
+      actor: "officer:admin"
+      note_nonempty: true
+      say: "a rejection with no reason on the record would not be a decision the department could defend"

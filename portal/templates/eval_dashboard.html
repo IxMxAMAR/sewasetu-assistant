@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sewa Setu assistant &middot; evals</title>
+<style>
+  :root { --navy:#1a3c6e; --ink:#1c2530; --line:#d6dde6; --ok:#1b7e3c; --bad:#b3261e; --muted:#5b6875; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.55 "Segoe UI", Roboto, Arial, sans-serif; color:var(--ink); background:#f4f6f8; }
+  header { background:var(--navy); color:#fff; padding:26px 28px 22px; }
+  header h1 { margin:0 0 6px; font-size:24px; letter-spacing:.2px; }
+  header p { margin:0; color:#c8d6ea; max-width:70ch; }
+  .wrap { max-width:1080px; margin:0 auto; padding:0 20px 60px; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:6px; padding:18px 20px; margin:18px 0; }
+  .stats { display:flex; flex-wrap:wrap; gap:26px; align-items:flex-end; }
+  .stat b { display:block; font-size:26px; color:var(--navy); line-height:1.1; }
+  .stat span { font-size:12px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); }
+  .meta { margin-top:14px; font-size:13px; color:var(--muted); }
+  .meta code { background:#eef2f6; padding:1px 5px; border-radius:3px; }
+  h2 { font-size:19px; margin:34px 0 4px; }
+  h3 { font-size:14px; text-transform:uppercase; letter-spacing:.7px; color:var(--muted); margin:18px 0 6px; }
+  .persona { background:#fff; border:1px solid var(--line); border-radius:6px; margin:14px 0; overflow:hidden; }
+  .persona > .head { display:flex; justify-content:space-between; gap:16px; align-items:baseline;
+                     padding:14px 20px; border-bottom:1px solid var(--line); background:#fbfcfd; }
+  .persona > .head .name { font-size:17px; font-weight:600; }
+  .persona > .head .who { font-size:13px; color:var(--muted); }
+  .persona > .body { padding:6px 20px 20px; }
+  .badge { font-size:11px; text-transform:uppercase; letter-spacing:.6px; padding:3px 8px;
+           border-radius:11px; background:#e8eef6; color:var(--navy); white-space:nowrap; }
+  .badge.ok { background:#e4f2e8; color:var(--ok); }
+  .badge.bad { background:#fbe9e7; color:var(--bad); }
+  .badge.officer { background:#efe7f6; color:#5a2d82; }
+  dl.facts { display:grid; grid-template-columns:max-content 1fr; gap:2px 14px; margin:12px 0 4px; font-size:13.5px; }
+  dl.facts dt { color:var(--muted); }
+  dl.facts dd { margin:0; }
+  .call { border-left:3px solid var(--line); margin:10px 0 0; padding-left:14px; }
+  .turn { margin:9px 0; }
+  .turn .role { font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); }
+  .turn.citizen .text { color:#243447; }
+  .turn.assistant { border-left:3px solid var(--navy); padding-left:10px; margin-left:-3px; }
+  .turn.tool { font-family:ui-monospace, Consolas, monospace; font-size:12px; color:#4a5563;
+               background:#f7f9fb; border:1px solid #eaeef3; border-radius:4px; padding:7px 9px; }
+  .turn.tool .name { color:var(--navy); font-weight:600; }
+  .turn.tool.refused { background:#fdf1f0; border-color:#f2cfcb; }
+  table { border-collapse:collapse; width:100%; margin-top:8px; font-size:13.5px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); font-weight:600; }
+  td.res { white-space:nowrap; font-weight:600; }
+  td.res.ok { color:var(--ok); } td.res.bad { color:var(--bad); }
+  td.ev { font-family:ui-monospace, Consolas, monospace; font-size:12px; color:#41505f; }
+  .note { background:#fffdf3; border:1px solid #eadfb8; border-radius:6px; padding:16px 20px; margin:18px 0; }
+  .note h3 { margin-top:0; }
+  .empty { text-align:center; color:var(--muted); padding:40px 0; }
+  footer { color:var(--muted); font-size:13px; margin-top:34px; border-top:1px solid var(--line); padding-top:14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sewa Setu assistant &mdash; evals</h1>
+  <p>The people we invented, the calls they had with the assistant, and what the
+     portal&rsquo;s database looked like when each call ended. Every persona signs in
+     for real and every tool call goes over the public MCP endpoint.</p>
+</header>
+
+<div class="wrap">
+{% if not report %}
+  <div class="panel empty">
+    <p>No eval run has been published on this host yet.</p>
+    <p class="meta">Looking for <code>{{ path }}</code></p>
+  </div>
+{% else %}
+
+  <div class="panel">
+    <div class="stats">
+      <div class="stat"><b>{{ report.summary.checks_passed }}/{{ report.summary.checks }}</b><span>checks passed</span></div>
+      <div class="stat"><b>{{ report.summary.personas_passed }}/{{ report.summary.personas }}</b><span>personas clean</span></div>
+      <div class="stat"><b>{{ (report.summary.pass_rate * 100) | round(0) | int }}%</b><span>pass rate</span></div>
+      <div class="stat"><b>{{ report.model.assistant.calls + report.model.citizen.calls }}</b><span>model calls</span></div>
+    </div>
+    <p class="meta">
+      Run {{ report.generated_at }} &middot;
+      assistant and citizen both played by <code>{{ report.model.assistant.model }}</code> &middot;
+      {{ report.model.assistant.prompt_tokens + report.model.citizen.prompt_tokens }} prompt tokens
+    </p>
+    <p class="meta">
+      Portal <code>{{ report.deployment.portal }}</code><br>
+      Citizen MCP <code>{{ report.deployment.citizen_mcp }}</code><br>
+      Officer MCP <code>{{ report.deployment.officer_mcp }}</code>
+    </p>
+  </div>
+
+  {% if report.lessons %}
+  <div class="note">
+    <h3>What the evals changed</h3>
+    <div>{{ report.lessons | safe }}</div>
+  </div>
+  {% endif %}
+
+  {% for p in report.personas %}
+  <div class="persona">
+    <div class="head">
+      <div>
+        <div class="name">{{ p.who }}</div>
+        <div class="who">
+          {%- if p.role == 'citizen' -%}
+            applicant{% if p.age %}, {{ p.age }}{% endif %}{% if p.village %}, {{ p.village }}{% endif %}{% if p.block %} ({{ p.block }} block){% endif %}
+          {%- else -%}
+            block officer
+          {%- endif -%}
+          &middot; signed in as <code>{{ p.signed_in_as }}</code>
+        </div>
+      </div>
+      <div>
+        <span class="badge {{ 'officer' if p.role == 'officer' }}">{{ p.role }}</span>
+        {% if p.error %}<span class="badge bad">did not run</span>
+        {% elif p.passed %}<span class="badge ok">all checks passed</span>
+        {% else %}<span class="badge bad">{{ p.checks | rejectattr('passed') | list | length }} failed</span>{% endif %}
+      </div>
+    </div>
+    <div class="body">
+      {% if p.error %}<p class="meta"><b>{{ p.error }}</b></p>{% endif %}
+      <dl class="facts">
+        <dt>How she talks</dt><dd>{{ p.voice }}</dd>
+        <dt>What she wanted</dt><dd>{{ p.goal }}</dd>
+        {% if p.tools_offered %}
+        <dt>Tools offered</dt><dd><code>{{ p.tools_offered | join(', ') }}</code></dd>
+        {% endif %}
+      </dl>
+
+      <h3>The call</h3>
+      <div class="call">
+        {% for t in p.transcript %}
+          {% if t.role == 'tool' %}
+            <div class="turn tool {{ 'refused' if t.failed }}">
+              <span class="name">{{ t.tool }}</span>({{ t.args | tojson }})
+              {% if t.failed %}<b> &mdash; refused</b>{% endif %}<br>
+              {{ t.result[:420] }}{% if t.result | length > 420 %}&hellip;{% endif %}
+            </div>
+          {% elif t.text %}
+            <div class="turn {{ t.role }}">
+              <div class="role">{{ 'the applicant' if t.role == 'citizen' else 'the assistant' }}</div>
+              <div class="text">{{ t.text }}</div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <h3>What the database says</h3>
+      <table>
+        <tr><th>Result</th><th>Check</th><th>What we asserted</th><th>Evidence</th></tr>
+        {% for c in p.checks %}
+        <tr>
+          <td class="res {{ 'ok' if c.passed else 'bad' }}">{{ 'PASS' if c.passed else 'FAIL' }}</td>
+          <td><code>{{ c.check }}</code></td>
+          <td>{{ c.say }}</td>
+          <td class="ev">{{ c.detail }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+
+  <footer>
+    Raw results: <a href="/eval-dashboard.json">/eval-dashboard.json</a> &middot;
+    the harness lives in <code>evals/harness/</code> in the repository.
+  </footer>
+{% endif %}
+</div>
+</body>
+</html>
