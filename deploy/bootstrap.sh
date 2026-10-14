@@ -26,7 +26,10 @@ set -euo pipefail
 REPO_URL="${REPO_URL:-https://github.com/IxMxAMAR/sewasetu-assistant.git}"
 REPO_REF="${REPO_REF:-main}"
 APP_DIR="${APP_DIR:-/opt/sewasetu/app}"
-STATE_DIR="${STATE_DIR:-/opt/sewasetu}"
+# The pod's container disk is wiped on restart; its volume at /workspace is not.
+# The Python environments and the database live there so a restart is a restart
+# and not a rebuild.
+STATE_DIR="${STATE_DIR:-/workspace/sewasetu}"
 
 # The department published this link with the handout. The 100k-row snapshot is
 # the department's data, not ours, so it is fetched from them rather than
