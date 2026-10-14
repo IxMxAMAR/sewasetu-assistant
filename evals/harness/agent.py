@@ -20,7 +20,7 @@ import re
 
 import requests
 
-from .mcpclient import render_result, tool_specs
+from mcpclient import failed, render_result, tool_specs
 
 # Any OpenAI-shaped endpoint will do. OpenRouter by default, because that is what
 # we ran against; EVAL_LLM_BASE points it at a gateway instead.
@@ -132,11 +132,10 @@ def attachment_note(filename: str, encoded: str) -> str:
             "filename: %s\nbase64: %s]" % (filename, encoded))
 
 
-async def conversation(session, persona: dict, assistant: Model, citizen: Model,
+async def conversation(session, init, persona: dict, assistant: Model, citizen: Model,
                        fixture_dir, transcript: list[dict], max_turns: int,
                        log=print) -> None:
     """Run one persona's call to the end, appending to `transcript`."""
-    init = await session.initialize()
     tools = tool_specs(await session.list_tools())
     system = (init.instructions or "").strip() + "\n" + HARNESS_NOTE
 
@@ -197,17 +196,17 @@ async def _assistant_speaks(session, model: Model, tools: list[dict], messages: 
                 args = json.loads(raw)
             except json.JSONDecodeError:
                 args = {}
-                result_text, failed = "your arguments were not valid JSON", True
+                result_text, was_refused = "your arguments were not valid JSON", True
             else:
                 try:
                     result = await session.call_tool(name, args)
                     result_text = render_result(result)
-                    failed = bool(getattr(result, "isError", False))
+                    was_refused = failed(result)
                 except Exception as exc:                       # noqa: BLE001 - reported, not raised
-                    result_text, failed = "the call failed: %s" % exc, True
+                    result_text, was_refused = "the call failed: %s" % exc, True
             transcript.append({"role": "tool", "tool": name, "args": args,
-                               "failed": failed, "result": result_text[:6000]})
-            log("    tool %-24s %s%s" % (name, "REFUSED " if failed else "", raw[:120]))
+                               "failed": was_refused, "result": result_text[:6000]})
+            log("    tool %-24s %s%s" % (name, "REFUSED " if was_refused else "", raw[:120]))
             messages.append({"role": "tool", "tool_call_id": call["id"],
                              "content": result_text[:6000]})
     return ""

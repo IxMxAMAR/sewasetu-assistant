@@ -17,14 +17,19 @@ from mcp.client.streamable_http import streamable_http_client
 
 @asynccontextmanager
 async def connect(url: str, access_token: str, timeout: float = 120.0):
-    """Yield an initialized ClientSession against one MCP server."""
+    """Yield (session, initialize result) against one MCP server.
+
+    The initialize result matters: the server's own `instructions` are what the
+    assistant is told, so the evals test the published instructions rather than a
+    copy of them kept in this repository.
+    """
     headers = {"Authorization": "Bearer " + access_token}
     async with httpx2.AsyncClient(headers=headers, timeout=timeout) as http:
         async with streamable_http_client(url, http_client=http) as streams:
             read, write = streams[0], streams[1]
             async with ClientSession(read, write) as session:
-                await session.initialize()
-                yield session
+                init = await session.initialize()
+                yield session, init
 
 
 def tool_specs(tools) -> list[dict]:
@@ -46,14 +51,26 @@ def render_result(result) -> str:
     """A tool's answer as text, however the server chose to send it."""
     import json
 
-    if getattr(result, "structuredContent", None) is not None:
-        return json.dumps(result.structuredContent, ensure_ascii=False, default=str)
+    structured = getattr(result, "structuredContent", None)
+    if structured is None:
+        structured = getattr(result, "structured_content", None)
+    if structured is not None:
+        return json.dumps(structured, ensure_ascii=False, default=str)
     parts = []
     for block in getattr(result, "content", None) or []:
         text = getattr(block, "text", None)
         if text is not None:
             parts.append(text)
         else:
-            parts.append(json.dumps(getattr(block, "model_dump", lambda: str(block))(),
+            dump = getattr(block, "model_dump", None)
+            parts.append(json.dumps(dump() if dump else str(block),
                                     ensure_ascii=False, default=str))
     return "\n".join(parts) if parts else "(no content)"
+
+
+def failed(result) -> bool:
+    """Did the server mark this call as an error?"""
+    flag = getattr(result, "isError", None)
+    if flag is None:
+        flag = getattr(result, "is_error", None)
+    return bool(flag)

@@ -105,11 +105,11 @@ async def run_persona(persona: dict, args, signin: SignIn, portal: Portal,
         record["signed_in_as"] = tokens["subject"]
         record["token_scope"] = tokens.get("scope")
         log("  signed in as %s" % tokens["subject"])
-        async with mcp_connect(mcp_url, tokens["access_token"]) as session:
+        async with mcp_connect(mcp_url, tokens["access_token"]) as (session, init):
             tools = await session.list_tools()
             record["tools_offered"] = sorted(t.name for t in tools.tools)
             log("  %d tools offered" % len(record["tools_offered"]))
-            await conversation(session, persona, assistant, citizen, args.fixtures,
+            await conversation(session, init, persona, assistant, citizen, args.fixtures,
                                record["transcript"], max_turns=persona.get("max_turns", 10),
                                log=log)
     except SignInError as exc:

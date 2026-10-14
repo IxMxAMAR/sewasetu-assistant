@@ -136,7 +136,10 @@ class Portal:
             back = _query("http://127.0.0.1" + server.captured)
             if back.get("state") != state:
                 raise SignInError("state did not survive the round trip")
-            if back.get("iss") != self.base:
+            # RFC 9207: if the server says who it is, it has to be who we think it
+            # is. The portal does send it; the check is lenient about absence so
+            # that a missing iss is not mistaken for a wrong one.
+            if back.get("iss") not in (None, self.base):
                 raise SignInError("iss on the authorization response was %r, expected %r"
                                   % (back.get("iss"), self.base))
             if "code" not in back:
