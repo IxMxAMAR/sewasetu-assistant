@@ -111,12 +111,25 @@ if [ ! -s "$PGDATA/PG_VERSION" ]; then
     # the portal connects over TCP as its own role with its own password.
     su postgres -c "$PG_BIN/initdb -D '$PGDATA' --encoding=UTF8 --locale=C.UTF-8 \
         --auth-local=trust --auth-host=scram-sha-256" >/dev/null
-    {
-        echo "listen_addresses = '127.0.0.1'"
-        echo "port = 5432"
-        echo "unix_socket_directories = '/tmp'"
-    } >> "$PGDATA/postgresql.conf"
 fi
+
+# Ours, not Debian's, and re-asserted on every run so an existing data
+# directory from an earlier revision of this script gets corrected too. The
+# socket stays where Debian puts it, because that is where psql looks by
+# default and the alternative is remembering -h on every command below.
+install -d -o postgres -g postgres -m 2775 /var/run/postgresql
+for setting in \
+    "listen_addresses = '127.0.0.1'" \
+    "port = 5432" \
+    "unix_socket_directories = '/var/run/postgresql'"
+do
+    key="${setting%% =*}"
+    if grep -qE "^[[:space:]]*${key}[[:space:]]*=" "$PGDATA/postgresql.conf"; then
+        sed -i "s|^[[:space:]]*${key}[[:space:]]*=.*|${setting}|" "$PGDATA/postgresql.conf"
+    else
+        echo "$setting" >> "$PGDATA/postgresql.conf"
+    fi
+done
 
 STARTED_PG=0
 if ! su postgres -c "$PG_BIN/pg_isready -q"; then
