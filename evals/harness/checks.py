@@ -87,6 +87,10 @@ def evaluate(portal: Portal, check: dict, transcript: list[dict], snapshot: dict
     try:
         passed, detail = handler(portal, check, transcript, snapshot, run_started)
     except Exception as exc:                                   # noqa: BLE001
+        # One bad query must not poison the connection: without this, every check
+        # after the first failure reports "current transaction is aborted" and the
+        # dashboard tells you nothing about what actually went wrong.
+        portal.conn.rollback()
         passed, detail = False, "the check itself failed: %s" % exc
     return _result(check, passed, detail)
 
@@ -170,7 +174,7 @@ def _check_audit(portal, check, transcript, snapshot, run_started):
 def _check_document_on_file(portal, check, transcript, snapshot, run_started):
     with portal.conn.cursor() as cur:
         row = _one(cur, "SELECT filename, path FROM agent_documents WHERE mobile = %s "
-                        "ORDER BY id DESC LIMIT 1", (check["mobile"],))
+                        "ORDER BY created_at DESC, ref DESC LIMIT 1", (check["mobile"],))
     if not row:
         return False, "no age proof on file for %s" % check["mobile"]
     exists = os.path.exists(row[1])

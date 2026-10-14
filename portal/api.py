@@ -199,12 +199,27 @@ APPLICATION_COLUMNS = ("id, application_no, applicant_name, mobile, dob, village
                        "bank_account, ifsc, status, submitted_at, decided_at, decided_by")
 
 
+def _stamp(value):
+    """A date or a timestamp as the string the portal uses everywhere else.
+
+    `dob` is a DATE and the others are TIMESTAMPs, and psycopg2 hands back a
+    datetime.date for the first and a datetime.datetime for the rest. Only the
+    second takes a separator, so calling isoformat(sep=...) on a date of birth
+    raises TypeError -- which is how every listing that included one turned into
+    a 500 the first time a real citizen asked for her own record.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ", timespec="seconds")
+    return value.isoformat()
+
+
 def _application_row(row):
     keys = [c.strip() for c in APPLICATION_COLUMNS.split(",")]
     out = dict(zip(keys, row))
     for k in ("dob", "submitted_at", "decided_at"):
-        if out.get(k) is not None:
-            out[k] = out[k].isoformat(sep=" ", timespec="seconds")
+        out[k] = _stamp(out.get(k))
     return out
 
 
@@ -506,8 +521,7 @@ def _officer_row(row, with_doc=False):
     keys = [c.strip() for c in OFFICER_COLUMNS.split(",")]
     out = dict(zip(keys, row))
     for k in ("dob", "submitted_at", "decided_at"):
-        if out.get(k) is not None:
-            out[k] = out[k].isoformat(sep=" ", timespec="seconds")
+        out[k] = _stamp(out.get(k))
     if not with_doc:
         out.pop("doc_path", None)
     return out

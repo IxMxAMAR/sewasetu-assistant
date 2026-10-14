@@ -237,7 +237,7 @@ $LOGGING
 [program:citizen-mcp]
 command=$STATE_DIR/venv-mcp/bin/python -m sewasetu_mcp citizen
 directory=$APP_DIR/mcp
-environment=PYTHONPATH="$APP_DIR/mcp",PORTAL_BASE_URL="$PUBLIC_BASE_URL",MCP_PUBLIC_URL="$CITIZEN_MCP_URL",MCP_PORT="8101",MCP_BIND_HOST="0.0.0.0"
+environment=PYTHONPATH="$APP_DIR/mcp",PORTAL_BASE_URL="$PUBLIC_BASE_URL",PORTAL_INTERNAL_URL="http://127.0.0.1:8000",MCP_PUBLIC_URL="$CITIZEN_MCP_URL",MCP_PORT="8101",MCP_BIND_HOST="0.0.0.0"
 autostart=true
 autorestart=true
 $LOGGING
@@ -245,7 +245,7 @@ $LOGGING
 [program:officer-mcp]
 command=$STATE_DIR/venv-mcp/bin/python -m sewasetu_mcp officer
 directory=$APP_DIR/mcp
-environment=PYTHONPATH="$APP_DIR/mcp",PORTAL_BASE_URL="$PUBLIC_BASE_URL",MCP_PUBLIC_URL="$OFFICER_MCP_URL",MCP_PORT="8102",MCP_BIND_HOST="0.0.0.0"
+environment=PYTHONPATH="$APP_DIR/mcp",PORTAL_BASE_URL="$PUBLIC_BASE_URL",PORTAL_INTERNAL_URL="http://127.0.0.1:8000",MCP_PUBLIC_URL="$OFFICER_MCP_URL",MCP_PORT="8102",MCP_BIND_HOST="0.0.0.0"
 autostart=true
 autorestart=true
 $LOGGING

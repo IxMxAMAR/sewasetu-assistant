@@ -26,14 +26,25 @@ from mcp.server.auth.provider import AccessToken, TokenVerifier
 
 log = logging.getLogger("sewasetu.auth")
 
+# PyJWKClient fetches the key set with urllib, whose default user agent is
+# "Python-urllib/3.11". Anything sitting in front of the portal that filters
+# obvious bots -- Cloudflare, which is in front of our own deployment -- answers
+# that with 403, and every token is then refused with "HTTP Error 403: Forbidden",
+# which reads like a permissions bug and is not one. Say who we are instead.
+USER_AGENT = "sewasetu-mcp/1.0 (+https://github.com/IxMxAMAR/sewasetu-assistant)"
+
 
 class PortalTokenVerifier(TokenVerifier):
-    def __init__(self, portal_base_url: str, resource_url: str, role: str):
+    def __init__(self, portal_base_url: str, resource_url: str, role: str,
+                 jwks_url: str | None = None):
         self.issuer = portal_base_url.rstrip("/")
         self.resource_url = resource_url.rstrip("/")
         self.role = role
-        self._jwks = PyJWKClient(self.issuer + "/.well-known/jwks.json",
-                                 cache_keys=True, lifespan=300)
+        # The issuer is checked against the portal's public name; the keys are
+        # fetched wherever this process can actually reach the portal.
+        self._jwks = PyJWKClient(jwks_url or self.issuer + "/.well-known/jwks.json",
+                                 cache_keys=True, lifespan=300,
+                                 headers={"User-Agent": USER_AGENT})
 
     def _audience_matches(self, aud) -> bool:
         """Accept the resource URL with or without the transport path.
@@ -52,6 +63,11 @@ class PortalTokenVerifier(TokenVerifier):
             claims = jwt.decode(
                 token, signing_key.key, algorithms=["RS256"],
                 issuer=self.issuer, options={"verify_aud": False},
+                # The portal stamps iat from its own clock, which is a second or
+                # two off any given client's; without leeway a token minted a
+                # moment ago is rejected as "not yet valid" and the failure looks
+                # like an authorization bug rather than a clock.
+                leeway=60,
             )
         except Exception as exc:                      # noqa: BLE001 - any failure is a refusal
             log.info("token refused: %s", exc)

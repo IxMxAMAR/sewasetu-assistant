@@ -18,6 +18,8 @@ class ConfigError(RuntimeError):
 @dataclass(frozen=True)
 class Settings:
     portal_base_url: str    # the department's portal, e.g. https://<host>-8000.proxy.runpod.net
+    portal_internal_url: str  # where to reach that same portal from here
+    jwks_url: str           # where the portal's public signing keys are
     public_url: str         # this server's own canonical URL, used as the token audience
     role: str               # "citizen" or "officer"
     host: str
@@ -37,8 +39,17 @@ def load(role: str, default_port: int) -> Settings:
         raise ConfigError(
             "MCP_PUBLIC_URL is not set. It must be the address at which assistants "
             "reach this server, because that address is the audience its tokens carry.")
+    # PORTAL_BASE_URL is the portal's public identity: it is the `iss` in every
+    # token and the link we show a user. It is not necessarily the address this
+    # process should dial. Behind a proxy that will not hairpin -- a request from
+    # the pod back to the pod's own public hostname comes back 403 -- those have
+    # to be two different URLs, so they are two settings.
+    internal = (os.environ.get("PORTAL_INTERNAL_URL") or portal).rstrip("/")
+    jwks = (os.environ.get("PORTAL_JWKS_URL") or internal + "/.well-known/jwks.json")
     return Settings(
         portal_base_url=portal,
+        portal_internal_url=internal,
+        jwks_url=jwks,
         public_url=public,
         role=role,
         host=os.environ.get("MCP_BIND_HOST", "0.0.0.0"),

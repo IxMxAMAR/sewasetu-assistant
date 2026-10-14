@@ -36,12 +36,17 @@ def tool_specs(tools) -> list[dict]:
     """The server's tool list, in the shape an OpenAI-style model expects."""
     out = []
     for tool in tools.tools:
+        # The SDK models are camelCase on the wire and snake_case in Python, and
+        # which one you get back depends on the version. Accept either.
+        schema = (getattr(tool, "inputSchema", None)
+                  or getattr(tool, "input_schema", None)
+                  or {"type": "object", "properties": {}})
         out.append({
             "type": "function",
             "function": {
                 "name": tool.name,
                 "description": (tool.description or "").strip(),
-                "parameters": tool.inputSchema or {"type": "object", "properties": {}},
+                "parameters": schema,
             },
         })
     return out

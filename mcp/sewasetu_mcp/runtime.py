@@ -30,7 +30,8 @@ NOT_SIGNED_IN = ("Nobody is signed in to the portal, so nothing can be read or f
 
 
 def build_server(settings: Settings, title: str, instructions: str) -> MCPServer:
-    verifier = PortalTokenVerifier(settings.portal_base_url, settings.public_url, settings.role)
+    verifier = PortalTokenVerifier(settings.portal_base_url, settings.public_url, settings.role,
+                                   jwks_url=settings.jwks_url)
     return MCPServer(
         name="sewasetu-" + settings.role,
         title=title,
@@ -59,7 +60,7 @@ def caller_portal(settings: Settings) -> Portal:
     token = get_access_token()
     if token is None:
         raise PortalError(401, {"message": NOT_SIGNED_IN})
-    return Portal(settings.portal_base_url, token.token)
+    return Portal(settings.portal_internal_url, token.token)
 
 
 def serve(server: MCPServer, settings: Settings) -> None:
@@ -67,9 +68,9 @@ def serve(server: MCPServer, settings: Settings) -> None:
         level=getattr(logging, settings.log_level, logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    log.info("%s listening on %s:%d%s (public URL %s, portal %s)",
+    log.info("%s listening on %s:%d%s (public URL %s, portal %s via %s)",
              server.name, settings.host, settings.port, settings.path,
-             settings.public_url, settings.portal_base_url)
+             settings.public_url, settings.portal_base_url, settings.portal_internal_url)
     asyncio.run(server.run_streamable_http_async(
         host=settings.host,
         port=settings.port,

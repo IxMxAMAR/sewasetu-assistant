@@ -8,11 +8,22 @@ a different token audience, and an assistant connected here cannot enumerate or
 call anything that is not in this file.
 """
 
+from typing import Annotated
+
 from mcp.server.mcpserver import MCPServer
+from pydantic import Field
 
 from .portal import PortalError
 from .runtime import build_server, caller_portal, serve
 from .settings import load
+
+# Field descriptions live on the schema as well as in the docstring. A small model
+# reads the schema first, and the difference between "dob" and "dob in DD/MM/YYYY"
+# is the difference between an application and an error message.
+DateOfBirth = Annotated[str, Field(description="Date of birth as DD/MM/YYYY, e.g. 04/02/1960")]
+BlockName = Annotated[str, Field(description="One of the block names from get_scheme_information")]
+BankAccount = Annotated[str, Field(description="Bank account number, digits only")]
+Ifsc = Annotated[str, Field(description="Bank IFSC code, 11 characters, e.g. SBIN0001234")]
 
 INSTRUCTIONS = """
 You are helping one person, who is 60 or older, with the Old Age Pension of the
@@ -74,11 +85,11 @@ def _register(server: MCPServer, portal) -> None:
     @server.tool()
     async def check_eligibility(
         applicant_name: str,
-        dob: str,
+        dob: DateOfBirth,
         village: str,
-        block: str,
-        bank_account: str,
-        ifsc: str,
+        block: BlockName,
+        bank_account: BankAccount,
+        ifsc: Ifsc,
         gender: str | None = None,
         marital_status: str | None = None,
         husband_name: str | None = None,
@@ -127,11 +138,11 @@ def _register(server: MCPServer, portal) -> None:
     @server.tool()
     async def submit_application(
         applicant_name: str,
-        dob: str,
+        dob: DateOfBirth,
         village: str,
-        block: str,
-        bank_account: str,
-        ifsc: str,
+        block: BlockName,
+        bank_account: BankAccount,
+        ifsc: Ifsc,
         document_ref: str,
         gender: str | None = None,
         marital_status: str | None = None,
