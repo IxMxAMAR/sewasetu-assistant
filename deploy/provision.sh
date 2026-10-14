@@ -32,8 +32,12 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/sewasetu/app}"
-STATE_DIR="${STATE_DIR:-/workspace/sewasetu}"
-PERSIST_DIR="${PERSIST_DIR:-/workspace}"
+# Everything that has to outlive a process: the database, the uploaded age
+# proofs, the logs, the two Python environments. Point PERSIST_DIR at a pod
+# volume if the host has one; on the pilot pod it is the container disk, which
+# survives a service restart but not a pod stop/start.
+PERSIST_DIR="${PERSIST_DIR:-/opt/sewasetu/state}"
+STATE_DIR="${STATE_DIR:-$PERSIST_DIR}"
 PGDATA="${PGDATA:-$PERSIST_DIR/pgdata}"
 ENV_FILE="${ENV_FILE:-$STATE_DIR/pilot.env}"
 LOG_DIR="$PERSIST_DIR/logs"
@@ -63,9 +67,9 @@ if [ ! -d "$APP_DIR/portal" ] || [ ! -d "$APP_DIR/mcp" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-log "persistent state under $PERSIST_DIR"
+log "state under $PERSIST_DIR"
 mkdir -p "$STATE_DIR" "$PERSIST_DIR/uploads" "$LOG_DIR"
-chmod 700 "$STATE_DIR"
+chmod 600 "$ENV_FILE"
 
 # ---------------------------------------------------------------------------
 log "packages"
@@ -102,6 +106,9 @@ echo "using $PG_BIN"
 
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
     install -d -o postgres -g postgres -m 700 "$PGDATA"
+    # Loopback only, so the unix socket is trusted and the TCP path is not: the
+    # setup commands below run as the postgres superuser over the socket, and
+    # the portal connects over TCP as its own role with its own password.
     su postgres -c "$PG_BIN/initdb -D '$PGDATA' --encoding=UTF8 --locale=C.UTF-8 \
         --auth-local=trust --auth-host=scram-sha-256" >/dev/null
     {
@@ -112,28 +119,30 @@ if [ ! -s "$PGDATA/PG_VERSION" ]; then
 fi
 
 STARTED_PG=0
-if ! su postgres -c "$PG_BIN/pg_isready -q -h 127.0.0.1 -p 5432"; then
+if ! su postgres -c "$PG_BIN/pg_isready -q"; then
+    # pg_ctl opens this as the postgres user before the server exists.
+    install -o postgres -g postgres -m 644 /dev/null "$LOG_DIR/postgres.log"
     su postgres -c "$PG_BIN/pg_ctl -D '$PGDATA' -l '$LOG_DIR/postgres.log' -w start"
     STARTED_PG=1
 fi
 
-su postgres -c "psql -h 127.0.0.1 -tAc \"SELECT 1 FROM pg_roles WHERE rolname='sewasetu'\"" \
+su postgres -c "psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='sewasetu'\"" \
     | grep -q 1 \
-    || su postgres -c "psql -h 127.0.0.1 -q -c \"CREATE ROLE sewasetu LOGIN PASSWORD 'sewasetu123'\""
-su postgres -c "psql -h 127.0.0.1 -tAc \"SELECT 1 FROM pg_database WHERE datname='sewasetu'\"" \
+    || su postgres -c "psql -q -c \"CREATE ROLE sewasetu LOGIN PASSWORD 'sewasetu123'\""
+su postgres -c "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='sewasetu'\"" \
     | grep -q 1 \
-    || su postgres -c "createdb -h 127.0.0.1 -O sewasetu sewasetu"
+    || su postgres -c "createdb -O sewasetu sewasetu"
 
 log "schema"
-su postgres -c "psql -h 127.0.0.1 -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/portal/schema.sql'"
+su postgres -c "psql -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/portal/schema.sql'"
 # Ours, applied after theirs. Idempotent, so it is safe on every run.
-su postgres -c "psql -h 127.0.0.1 -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/portal/schema_agent.sql'"
+su postgres -c "psql -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/portal/schema_agent.sql'"
 
-ROWS=$(su postgres -c "psql -h 127.0.0.1 -tAc 'SELECT count(*) FROM applications' -d sewasetu" | tr -d '[:space:]')
+ROWS=$(su postgres -c "psql -tAc 'SELECT count(*) FROM applications' -d sewasetu" | tr -d '[:space:]')
 if [ "$ROWS" = "0" ]; then
     log "seed ($(du -h "$APP_DIR/seed/seed.sql" | cut -f1))"
-    su postgres -c "psql -h 127.0.0.1 -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/seed/seed.sql'"
-    su postgres -c "psql -h 127.0.0.1 -tAc 'SELECT count(*) FROM applications' -d sewasetu"
+    su postgres -c "psql -q -v ON_ERROR_STOP=1 -d sewasetu -f '$APP_DIR/seed/seed.sql'"
+    su postgres -c "psql -tAc 'SELECT count(*) FROM applications' -d sewasetu"
 else
     log "seed skipped: $ROWS applications already present"
 fi

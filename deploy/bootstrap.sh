@@ -26,10 +26,10 @@ set -euo pipefail
 REPO_URL="${REPO_URL:-https://github.com/IxMxAMAR/sewasetu-assistant.git}"
 REPO_REF="${REPO_REF:-main}"
 APP_DIR="${APP_DIR:-/opt/sewasetu/app}"
-# The pod's container disk is wiped on restart; its volume at /workspace is not.
-# The Python environments and the database live there so a restart is a restart
-# and not a rebuild.
-STATE_DIR="${STATE_DIR:-/workspace/sewasetu}"
+# Everything that has to outlive a process lives here: pilot.env, the database,
+# the uploaded age proofs and the two Python environments. Point this at a pod
+# volume if the host has one.
+STATE_DIR="${STATE_DIR:-/opt/sewasetu/state}"
 
 # The department published this link with the handout. The 100k-row snapshot is
 # the department's data, not ours, so it is fetched from them rather than
@@ -37,6 +37,11 @@ STATE_DIR="${STATE_DIR:-/workspace/sewasetu}"
 HANDOUT_ZIP_URL="${HANDOUT_ZIP_URL:-https://drive.google.com/uc?export=download&id=1vpY9JvXL5iFesJ2vkMhC-b4tL89PAL50}"
 
 log() { printf '\n=== %s\n' "$*"; }
+
+# There is nobody at the console on the pilot host, so a failure here has to be
+# loud in the pod log and then get out of the way: the container exits, Runpod
+# starts it again, and the whole thing is retried from the top.
+trap 'code=$?; echo "bootstrap: failed (exit $code) at line $LINENO; retrying in 60s" >&2; sleep 60; exit $code' ERR
 
 log "repository"
 if [ -d "$APP_DIR/.git" ]; then
