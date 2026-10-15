@@ -1,4 +1,4 @@
-﻿"""What has to be true in the portal's database when the talking stops.
+"""What has to be true in the portal's database when the talking stops.
 
 The Director's test of an assistant is not whether it sounded helpful. It is
 whether it got somebody a pension that the counter or the paper form would not

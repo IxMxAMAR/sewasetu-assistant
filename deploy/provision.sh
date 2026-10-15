@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 #
 # Bring the Sewa Setu assistant pilot up on a bare Ubuntu 22.04 host.
 #

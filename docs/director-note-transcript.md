@@ -1,4 +1,4 @@
-﻿# The Director's note, transcribed
+# The Director's note, transcribed
 
 Three minutes and fourteen seconds, transcribed with WhisperX on an AMD GPU and
 checked by hand. Timestamps are from the start of the recording.

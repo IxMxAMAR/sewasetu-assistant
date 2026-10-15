@@ -1,4 +1,4 @@
-﻿# Local run of the whole thing.
+# Local run of the whole thing.
 #
 # The deployment the live URLs point at is a Runpod pod that provisions itself
 # from this repository (see deploy/bootstrap.sh) -- that is the path that has been
@@ -14,6 +14,10 @@
 # The seed data is the department's, and is not in this repository. Put it at
 # seed/seed.sql before the first boot (see seed/README.md), or the database comes
 # up empty.
+#
+# TZ is set on every service. The portal stores its timestamps with the process
+# clock while its own rules are computed in Asia/Kolkata, so if the container
+# runs in UTC the two disagree by five and a half hours.
 services:
   db:
     image: postgres:15
@@ -84,9 +88,11 @@ services:
 
   scheduler:
     build: ./portal
+    environment:
+      TZ: Asia/Kolkata
     # Run the deemed-approval job once at startup (so a freshly restored
     # database is brought up to date), then hand over to cron for the nightly run.
-    environment:`n      TZ: Asia/Kolkata`n    command: ["sh", "-c", "until python /app/scripts/deemed_approval.py; do sleep 5; done; exec cron -f"]
+    command: ["sh", "-c", "until python /app/scripts/deemed_approval.py; do sleep 5; done; exec cron -f"]
     depends_on:
       - db
     volumes:
@@ -94,7 +100,9 @@ services:
 
   smsgw:
     build: ./smsgw
-    # internal only â€” reached by the app over the docker network and exposed to
+    environment:
+      TZ: Asia/Kolkata
+    # internal only - reached by the app over the docker network and exposed to
     # users via the app at /__gateway/ (so no second host port is needed)
     expose:
       - "8025"
