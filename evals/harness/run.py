@@ -80,6 +80,25 @@ def resolve_targets(personas: list[dict], portal: Portal) -> None:
         print("  %s -> %s" % (persona["id"], number))
 
 
+def describe(exc: BaseException) -> str:
+    """The useful part of an exception.
+
+    anyio wraps everything the MCP client raises in an ExceptionGroup, so the
+    message on its own is "unhandled errors in a TaskGroup" and tells you nothing.
+    The leaf is what actually went wrong.
+    """
+    def leaves(error):
+        children = getattr(error, "exceptions", None)
+        if children:
+            for child in children:
+                yield from leaves(child)
+        else:
+            yield error
+
+    parts = ["%s: %s" % (type(leaf).__name__, leaf) for leaf in leaves(exc)]
+    return " | ".join(parts) if parts else repr(exc)
+
+
 async def run_persona(persona: dict, args, signin: SignIn, portal: Portal,
                       snapshot: dict, run_started, assistant: Model,
                       citizen: Model, log=print) -> dict:
@@ -116,7 +135,7 @@ async def run_persona(persona: dict, args, signin: SignIn, portal: Portal,
         record["error"] = "sign-in: %s" % exc
         log("  SIGN-IN FAILED: %s" % exc)
     except Exception as exc:                                   # noqa: BLE001
-        record["error"] = "%s: %s" % (type(exc).__name__, exc)
+        record["error"] = describe(exc)
         log("  FAILED: %s" % record["error"])
 
     for check in persona.get("checks", []):

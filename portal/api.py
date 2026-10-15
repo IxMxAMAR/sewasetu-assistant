@@ -223,9 +223,13 @@ def _application_row(row):
     return out
 
 
-@api.get("/citizen/me")
-@require_role("citizen")
-def citizen_me(claims, mobile):
+def _citizen_applications(mobile):
+    """Every application on one mobile number, newest first.
+
+    Shared by the two routes below rather than one route calling the other: both
+    of those are wrapped by require_role, and a wrapped endpoint invoked from
+    another one gets its claims passed in twice.
+    """
     conn = _db()
     cur = conn.cursor()
     cur.execute("SELECT %s FROM applications WHERE mobile = %%s "
@@ -233,14 +237,20 @@ def citizen_me(claims, mobile):
     rows = [_application_row(r) for r in cur.fetchall()]
     cur.close()
     conn.close()
-    return jsonify({"mobile": mobile, "applications": rows,
-                    "scheme": {"amount_rupees_per_month": PENSION_AMOUNT}})
+    return {"mobile": mobile, "applications": rows,
+            "scheme": {"amount_rupees_per_month": PENSION_AMOUNT}}
+
+
+@api.get("/citizen/me")
+@require_role("citizen")
+def citizen_me(claims, mobile):
+    return jsonify(_citizen_applications(mobile))
 
 
 @api.get("/citizen/applications")
 @require_role("citizen")
 def citizen_applications(claims, mobile):
-    return citizen_me(claims, mobile)
+    return jsonify(_citizen_applications(mobile))
 
 
 @api.get("/citizen/applications/<int:app_id>")

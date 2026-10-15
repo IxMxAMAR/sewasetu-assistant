@@ -1,3 +1,19 @@
+# Local run of the whole thing.
+#
+# The deployment the live URLs point at is a Runpod pod that provisions itself
+# from this repository (see deploy/bootstrap.sh) -- that is the path that has been
+# exercised end to end, including the evals. This file is here so the pieces can
+# be started on one machine and looked at; it has not been run as often.
+#
+#   docker compose up --build
+#
+#   portal       http://localhost:8000
+#   citizen MCP  http://localhost:8101/mcp
+#   officer MCP  http://localhost:8102/mcp
+#
+# The seed data is the department's, and is not in this repository. Put it at
+# seed/seed.sql before the first boot (see seed/README.md), or the database comes
+# up empty.
 services:
   db:
     image: postgres:15
@@ -7,11 +23,12 @@ services:
       POSTGRES_PASSWORD: sewasetu123
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./app/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-      - ./seed/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+      - ./portal/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./portal/schema_agent.sql:/docker-entrypoint-initdb.d/02-agent.sql
+      - ./seed/seed.sql:/docker-entrypoint-initdb.d/03-seed.sql
 
   app:
-    build: ./app
+    build: ./portal
     ports:
       - "8000:8000"
     environment:
@@ -20,15 +37,50 @@ services:
       # the address at which people reach this portal; stamped into sign-in tokens and
       # discovery documents, so it must be the public one when deployed
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      # the two MCP servers, as token audiences. A token minted for one is refused
+      # by the other; this is where the portal is told which addresses are real.
+      MCP_RESOURCES: ${CITIZEN_MCP_URL:-http://localhost:8101},${OFFICER_MCP_URL:-http://localhost:8102}
+      # the blocks the assistant may file in. Reads are not restricted.
+      AGENT_PILOT_BLOCKS: ${AGENT_PILOT_BLOCKS:-Sonari,Namti}
+      EVAL_RESULTS: /app/evals/results/latest.json
     depends_on:
       - db
       - smsgw
     volumes:
       - uploads:/var/sewasetu/uploads
       - applogs:/var/log/sewasetu
+      - ./evals/results:/app/evals/results:ro
+
+  citizen-mcp:
+    build: ./mcp
+    command: ["python", "-m", "sewasetu_mcp", "citizen"]
+    ports:
+      - "8101:8101"
+    environment:
+      PORTAL_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      # inside the network the portal is reachable directly; going back out
+      # through the public hostname is slower and, behind a proxy, may not work
+      PORTAL_INTERNAL_URL: http://app:8000
+      MCP_PUBLIC_URL: ${CITIZEN_MCP_URL:-http://localhost:8101}
+      MCP_PORT: "8101"
+    depends_on:
+      - app
+
+  officer-mcp:
+    build: ./mcp
+    command: ["python", "-m", "sewasetu_mcp", "officer"]
+    ports:
+      - "8102:8102"
+    environment:
+      PORTAL_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      PORTAL_INTERNAL_URL: http://app:8000
+      MCP_PUBLIC_URL: ${OFFICER_MCP_URL:-http://localhost:8102}
+      MCP_PORT: "8102"
+    depends_on:
+      - app
 
   scheduler:
-    build: ./app
+    build: ./portal
     # Run the deemed-approval job once at startup (so a freshly restored
     # database is brought up to date), then hand over to cron for the nightly run.
     command: ["sh", "-c", "until python /app/scripts/deemed_approval.py; do sleep 5; done; exec cron -f"]

@@ -37,27 +37,33 @@ the person must come from a tool result. Keep your replies short -- two or three
 sentences -- because she is reading them on a small phone screen.
 """
 
-CITIZEN_SYSTEM = """You are not an assistant. You are a person on the phone, and you are
-talking to an assistant that can file and check pension applications.
+CITIZEN_SYSTEM = """You are role-playing a person who is on the phone with an assistant that can
+check and file old-age pension applications. You are not the assistant.
 
+Who you are:
 {voice}
 
 What you want out of this call:
 {goal}
 
-Rules for you:
-- Say only what the person would say out loud. One or two short sentences.
-- Never mention tools, systems, databases, JSON, or that you are an AI.
-- Answer only what you are asked, with what you know. If you do not know
-  something the persona above does not give you, say you do not know.
-- When your goal is met, or you have been told something final, reply with
-  exactly DONE and nothing else.
-- If the assistant asks you to send a document, say you are sending the photo now.
+How to reply:
+- Speak only as this person would speak out loud, in one or two short sentences.
+- Do not repeat, quote or paraphrase any of the text above, and never mention
+  assistants, tools, systems, JSON or that you are an AI.
+- Answer only what you are asked, with what the paragraph above tells you. If you
+  do not know something it does not mention, say you do not know.
+- When your goal is met, or you have been told something final, answer with the
+  single word DONE and nothing else. Do that as soon as the call is over -- do not
+  keep saying goodbye.
 
-Here is the call so far.
+The call so far:
 {history}
 
-What do you say next?"""
+Your next line:"""
+
+# The models we test with sometimes wrap their answer in a "### Thoughts" block,
+# so look for DONE anywhere rather than only at the start.
+DONE = re.compile(r"\bDONE\b", re.IGNORECASE)
 
 ATTACHMENT_TRIGGER = re.compile(
     r"sending|sent|attach|photo|picture|aadhaar|aadhar|document|here it is|upload",
@@ -164,19 +170,48 @@ async def conversation(session, init, persona: dict, assistant: Model, citizen: 
         if turn == max_turns - 1:
             break
 
-        nxt = citizen.complete([{
-            "role": "system",
-            "content": CITIZEN_SYSTEM.format(voice=persona["voice"].strip(),
-                                             goal=persona["goal"].strip(),
-                                             history=_history(transcript)),
-        }], temperature=0.7)["content"] or ""
-        nxt = nxt.strip()
-        if nxt.upper().startswith("DONE"):
+        nxt = await _citizen_speaks(citizen, persona, transcript, log)
+        if nxt is None:
             log("    (the citizen is finished)")
             break
         said = nxt
         transcript.append({"role": "citizen", "text": said})
         log("    citizen:   %s" % said[:220])
+
+
+# A small model asked to play a person will sometimes answer with the brief
+# instead of the person's words -- "Say only what the person would say out loud."
+# That is not a line the assistant can reply to, and left alone it turns the call
+# into ten rounds of the two of them saying goodbye. Ask once more, plainly, and
+# if it happens again end the call.
+ECHO = re.compile(r"say only what the person|one or two short sentences|"
+                  r"answer with the single word|how to reply|"
+                  r"what you want out of this call|who you are", re.IGNORECASE)
+
+NUDGE = ("You repeated the brief instead of speaking. Reply with the person's next "
+         "sentence and nothing else.")
+
+
+async def _citizen_speaks(citizen: Model, persona: dict, transcript: list[dict],
+                          log) -> str | None:
+    """The citizen's next line, or None when the call is over."""
+    messages = [{
+        "role": "system",
+        "content": CITIZEN_SYSTEM.format(voice=persona["voice"].strip(),
+                                         goal=persona["goal"].strip(),
+                                         history=_history(transcript)),
+    }]
+    reply = ""
+    for attempt in range(2):
+        reply = (citizen.complete(messages, temperature=0.7)["content"] or "").strip()
+        if reply and not ECHO.search(reply):
+            break
+        log("    (the citizen answered with the brief%s)"
+            % ("" if attempt == 0 else ", twice"))
+        messages.append({"role": "user", "content": NUDGE})
+    else:
+        return None
+    return None if DONE.search(reply) else reply
 
 
 async def _assistant_speaks(session, model: Model, tools: list[dict], messages: list[dict],
