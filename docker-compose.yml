@@ -1,4 +1,4 @@
-# Local run of the whole thing.
+﻿# Local run of the whole thing.
 #
 # The deployment the live URLs point at is a Runpod pod that provisions itself
 # from this repository (see deploy/bootstrap.sh) -- that is the path that has been
@@ -32,6 +32,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      TZ: Asia/Kolkata
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-before-deploying}
       # the address at which people reach this portal; stamped into sign-in tokens and
@@ -57,6 +58,7 @@ services:
     ports:
       - "8101:8101"
     environment:
+      TZ: Asia/Kolkata
       PORTAL_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
       # inside the network the portal is reachable directly; going back out
       # through the public hostname is slower and, behind a proxy, may not work
@@ -72,6 +74,7 @@ services:
     ports:
       - "8102:8102"
     environment:
+      TZ: Asia/Kolkata
       PORTAL_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
       PORTAL_INTERNAL_URL: http://app:8000
       MCP_PUBLIC_URL: ${OFFICER_MCP_URL:-http://localhost:8102}
@@ -83,7 +86,7 @@ services:
     build: ./portal
     # Run the deemed-approval job once at startup (so a freshly restored
     # database is brought up to date), then hand over to cron for the nightly run.
-    command: ["sh", "-c", "until python /app/scripts/deemed_approval.py; do sleep 5; done; exec cron -f"]
+    environment:`n      TZ: Asia/Kolkata`n    command: ["sh", "-c", "until python /app/scripts/deemed_approval.py; do sleep 5; done; exec cron -f"]
     depends_on:
       - db
     volumes:
@@ -91,7 +94,7 @@ services:
 
   smsgw:
     build: ./smsgw
-    # internal only — reached by the app over the docker network and exposed to
+    # internal only â€” reached by the app over the docker network and exposed to
     # users via the app at /__gateway/ (so no second host port is needed)
     expose:
       - "8025"

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 #
 # Bring the Sewa Setu assistant pilot up on a bare Ubuntu 22.04 host.
 #
@@ -85,6 +85,11 @@ apt-get install -y -qq --no-install-recommends \
 # agree with it.
 ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime
 echo "Asia/Kolkata" > /etc/timezone
+# /etc/localtime is not enough on its own: the base image exports TZ, and an
+# exported TZ wins over the file. Without this the portal stores timestamps in
+# UTC while its own rules -- age, deadlines -- are computed in IST, so the two
+# disagree by five and a half hours. Every program below is given TZ
+# explicitly rather than relying on the system default.
 
 # ---------------------------------------------------------------------------
 log "service names"
@@ -229,7 +234,7 @@ $LOGGING
 [program:portal]
 command=$STATE_DIR/venv-portal/bin/gunicorn --bind 0.0.0.0:8000 --workers 2 --timeout 60 --access-logfile - wsgi:app
 directory=$APP_DIR/portal
-environment=SECRET_KEY="$SECRET_KEY",ADMIN_USERNAME="$ADMIN_USERNAME",ADMIN_PASSWORD="$ADMIN_PASSWORD",PUBLIC_BASE_URL="$PUBLIC_BASE_URL",MCP_RESOURCES="$CITIZEN_MCP_URL,$OFFICER_MCP_URL",AGENT_PILOT_BLOCKS="$AGENT_PILOT_BLOCKS",EVAL_RESULTS="$APP_DIR/evals/results/latest.json"
+environment=TZ=Asia/Kolkata,SECRET_KEY="$SECRET_KEY",ADMIN_USERNAME="$ADMIN_USERNAME",ADMIN_PASSWORD="$ADMIN_PASSWORD",PUBLIC_BASE_URL="$PUBLIC_BASE_URL",MCP_RESOURCES="$CITIZEN_MCP_URL,$OFFICER_MCP_URL",AGENT_PILOT_BLOCKS="$AGENT_PILOT_BLOCKS",EVAL_RESULTS="$APP_DIR/evals/results/latest.json"
 autostart=true
 autorestart=true
 $LOGGING
@@ -237,7 +242,7 @@ $LOGGING
 [program:citizen-mcp]
 command=$STATE_DIR/venv-mcp/bin/python -m sewasetu_mcp citizen
 directory=$APP_DIR/mcp
-environment=PYTHONPATH="$APP_DIR/mcp",PORTAL_BASE_URL="$PUBLIC_BASE_URL",PORTAL_INTERNAL_URL="http://127.0.0.1:8000",MCP_PUBLIC_URL="$CITIZEN_MCP_URL",MCP_PORT="8101",MCP_BIND_HOST="0.0.0.0"
+environment=TZ=Asia/Kolkata,PYTHONPATH="$APP_DIR/mcp",PORTAL_BASE_URL="$PUBLIC_BASE_URL",PORTAL_INTERNAL_URL="http://127.0.0.1:8000",MCP_PUBLIC_URL="$CITIZEN_MCP_URL",MCP_PORT="8101",MCP_BIND_HOST="0.0.0.0"
 autostart=true
 autorestart=true
 $LOGGING
@@ -245,13 +250,14 @@ $LOGGING
 [program:officer-mcp]
 command=$STATE_DIR/venv-mcp/bin/python -m sewasetu_mcp officer
 directory=$APP_DIR/mcp
-environment=PYTHONPATH="$APP_DIR/mcp",PORTAL_BASE_URL="$PUBLIC_BASE_URL",PORTAL_INTERNAL_URL="http://127.0.0.1:8000",MCP_PUBLIC_URL="$OFFICER_MCP_URL",MCP_PORT="8102",MCP_BIND_HOST="0.0.0.0"
+environment=TZ=Asia/Kolkata,PYTHONPATH="$APP_DIR/mcp",PORTAL_BASE_URL="$PUBLIC_BASE_URL",PORTAL_INTERNAL_URL="http://127.0.0.1:8000",MCP_PUBLIC_URL="$OFFICER_MCP_URL",MCP_PORT="8102",MCP_BIND_HOST="0.0.0.0"
 autostart=true
 autorestart=true
 $LOGGING
 
 [program:cron]
 command=/usr/sbin/cron -f
+environment=TZ=Asia/Kolkata
 autostart=true
 autorestart=true
 $LOGGING
@@ -268,7 +274,7 @@ if [ "${RUN_EVALS:-0}" = "1" ]; then
 [program:evals]
 command=$STATE_DIR/venv-evals/bin/python $APP_DIR/evals/harness/run.py --base-url $PUBLIC_BASE_URL --citizen-mcp $CITIZEN_MCP_URL/mcp --officer-mcp $OFFICER_MCP_URL/mcp --out $APP_DIR/evals/results/latest.json --runs $APP_DIR/evals/runs
 directory=$APP_DIR
-environment=OPENROUTER_API_KEY="$OPENROUTER_API_KEY",EVAL_MODEL="${EVAL_MODEL:-google/gemini-3.1-flash-lite}",EVAL_LLM_BASE="${EVAL_LLM_BASE:-}",ADMIN_USERNAME="$ADMIN_USERNAME",ADMIN_PASSWORD="$ADMIN_PASSWORD",PYTHONPATH="$APP_DIR/evals"
+environment=TZ=Asia/Kolkata,OPENROUTER_API_KEY="$OPENROUTER_API_KEY",EVAL_MODEL="${EVAL_MODEL:-google/gemini-3.1-flash-lite}",EVAL_LLM_BASE="${EVAL_LLM_BASE:-}",ADMIN_USERNAME="$ADMIN_USERNAME",ADMIN_PASSWORD="$ADMIN_PASSWORD",PYTHONPATH="$APP_DIR/evals"
 autostart=true
 autorestart=false
 startsecs=0

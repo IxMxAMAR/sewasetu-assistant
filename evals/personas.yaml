@@ -146,8 +146,8 @@
       mobile: "9859000022"
       say: "no application was filed for somebody under the age the portal requires"
     - check: tool_used
-      tool: check_eligibility
-      say: "the refusal came from the portal's own age rule, not from the assistant's opinion"
+      tool: get_scheme_information
+      say: "the age limit came from the portal's own scheme record, not from the assistant's memory"
     - check: said
       contains: "60"
       say: "he was told the actual minimum age"

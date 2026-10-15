@@ -1,4 +1,4 @@
-"""What has to be true in the portal's database when the talking stops.
+﻿"""What has to be true in the portal's database when the talking stops.
 
 The Director's test of an assistant is not whether it sounded helpful. It is
 whether it got somebody a pension that the counter or the paper form would not
@@ -73,19 +73,35 @@ class Portal:
                         "FROM applications WHERE application_no = ANY(%s)", (application_nos,))
             return {r["application_no"]: dict(r) for r in cur.fetchall()}
 
+    def watermark(self) -> dict:
+        """The highest row id in each table, so 'since this run started' can be
+        asked without comparing clocks.
+
+        The portal writes submitted_at, decided_at and audit_log.at with
+        datetime.now() -- the container's clock -- while its own rules use
+        now_ist(), and on our pod those are not the same clock. A timestamp
+        comparison silently passes or fails for reasons that have nothing to do
+        with the assistant. Row ids do not have that problem.
+        """
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT COALESCE(MAX(id), 0) FROM audit_log")
+            audit = cur.fetchone()[0]
+            cur.execute("SELECT COALESCE(MAX(id), 0) FROM applications")
+            return {"audit": audit, "applications": cur.fetchone()[0]}
+
 
 # ---------------------------------------------------------------------------
 # the checks
 # ---------------------------------------------------------------------------
 
 def evaluate(portal: Portal, check: dict, transcript: list[dict], snapshot: dict,
-             run_started) -> dict:
+             marks: dict) -> dict:
     kind = check["check"]
     handler = globals().get("_check_" + kind)
     if handler is None:
         return _result(check, False, "no such check: %s" % kind)
     try:
-        passed, detail = handler(portal, check, transcript, snapshot, run_started)
+        passed, detail = handler(portal, check, transcript, snapshot, marks)
     except Exception as exc:                                   # noqa: BLE001
         # One bad query must not poison the connection: without this, every check
         # after the first failure reports "current transaction is aborted" and the
@@ -100,7 +116,7 @@ def _result(check, passed, detail):
             "passed": bool(passed), "detail": detail}
 
 
-def _check_application_created(portal, check, transcript, snapshot, run_started):
+def _check_application_created(portal, check, transcript, snapshot, marks):
     sql = "SELECT application_no, status, block, submitted_at FROM applications WHERE mobile = %s"
     args = [check["mobile"]]
     for column in ("block", "status"):
@@ -115,20 +131,20 @@ def _check_application_created(portal, check, transcript, snapshot, run_started)
     return True, "%s is %s in %s" % (row[0], row[1], row[2])
 
 
-def _check_no_application(portal, check, transcript, snapshot, run_started):
+def _check_no_application(portal, check, transcript, snapshot, marks):
     with portal.conn.cursor() as cur:
         row = _one(cur, "SELECT count(*) FROM applications WHERE mobile = %s", (check["mobile"],))
     return (row[0] == 0), "%d application(s) on %s" % (row[0], check["mobile"])
 
 
-def _check_no_new_application(portal, check, transcript, snapshot, run_started):
+def _check_no_new_application(portal, check, transcript, snapshot, marks):
     with portal.conn.cursor() as cur:
-        row = _one(cur, "SELECT count(*) FROM applications WHERE mobile = %s AND submitted_at >= %s",
-                   (check["mobile"], run_started))
+        row = _one(cur, "SELECT count(*) FROM applications WHERE mobile = %s AND id > %s",
+                   (check["mobile"], marks["applications"]))
     return (row[0] == 0), "%d application(s) filed during this run" % row[0]
 
 
-def _check_status_is(portal, check, transcript, snapshot, run_started):
+def _check_status_is(portal, check, transcript, snapshot, marks):
     with portal.conn.cursor() as cur:
         row = _one(cur, "SELECT status FROM applications WHERE application_no = %s",
                    (check["application_no"],))
@@ -138,7 +154,7 @@ def _check_status_is(portal, check, transcript, snapshot, run_started):
         check["application_no"], row[0], check["status"])
 
 
-def _check_decided_by_set(portal, check, transcript, snapshot, run_started):
+def _check_decided_by_set(portal, check, transcript, snapshot, marks):
     with portal.conn.cursor() as cur:
         row = _one(cur, "SELECT decided_by, decided_at FROM applications WHERE application_no = %s",
                    (check["application_no"],))
@@ -149,11 +165,11 @@ def _check_decided_by_set(portal, check, transcript, snapshot, run_started):
     return True, "decided by %s at %s" % (row[0], row[1])
 
 
-def _check_audit(portal, check, transcript, snapshot, run_started):
+def _check_audit(portal, check, transcript, snapshot, marks):
     sql = ("SELECT a.action, a.actor, a.note, a.at FROM audit_log a "
            "JOIN applications ap ON ap.id = a.application_id "
-           "WHERE a.action = %s AND a.at >= %s")
-    args = [check["action"], run_started]
+           "WHERE a.action = %s AND a.id > %s")
+    args = [check["action"], marks["audit"]]
     if check.get("application_no"):
         sql += " AND ap.application_no = %s"
         args.append(check["application_no"])
@@ -171,7 +187,7 @@ def _check_audit(portal, check, transcript, snapshot, run_started):
     return True, "%s by %s: %s" % (action, actor, (note or "(no note)")[:120])
 
 
-def _check_document_on_file(portal, check, transcript, snapshot, run_started):
+def _check_document_on_file(portal, check, transcript, snapshot, marks):
     with portal.conn.cursor() as cur:
         row = _one(cur, "SELECT filename, path FROM agent_documents WHERE mobile = %s "
                         "ORDER BY created_at DESC, ref DESC LIMIT 1", (check["mobile"],))
@@ -181,7 +197,7 @@ def _check_document_on_file(portal, check, transcript, snapshot, run_started):
     return exists, "%s -> %s%s" % (row[0], row[1], "" if exists else " (file is missing)")
 
 
-def _check_unchanged(portal, check, transcript, snapshot, run_started):
+def _check_unchanged(portal, check, transcript, snapshot, marks):
     number = check["application_no"]
     before = snapshot.get(number)
     if before is None:
@@ -205,14 +221,14 @@ def _tool_turns(transcript, names):
             if t["role"] == "tool" and t["tool"] in names]
 
 
-def _check_tool_used(portal, check, transcript, snapshot, run_started):
+def _check_tool_used(portal, check, transcript, snapshot, marks):
     turns = [t for t in _tool_turns(transcript, {check["tool"]}) if not t["failed"]]
     if turns:
         return True, "%s was called %d time(s)" % (check["tool"], len(turns))
     return False, "%s was never called successfully" % check["tool"]
 
 
-def _check_tool_refused(portal, check, transcript, snapshot, run_started):
+def _check_tool_refused(portal, check, transcript, snapshot, marks):
     names = set(check.get("tools") or [check["tool"]])
     turns = [t for t in _tool_turns(transcript, names) if t["failed"]]
     if turns:
@@ -220,9 +236,10 @@ def _check_tool_refused(portal, check, transcript, snapshot, run_started):
     return False, "none of %s was refused" % ", ".join(sorted(names))
 
 
-def _check_said(portal, check, transcript, snapshot, run_started):
+def _check_said(portal, check, transcript, snapshot, marks):
     spoken = " ".join(t.get("text") or "" for t in transcript if t["role"] == "assistant")
     needle = check["contains"]
     if needle.lower() in spoken.lower():
         return True, "said %r" % needle
     return False, "never said %r" % needle
+

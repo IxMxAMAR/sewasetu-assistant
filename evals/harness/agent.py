@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 
 import requests
 
@@ -82,23 +83,32 @@ class Model:
         self.completion_tokens = 0
 
     def complete(self, messages: list[dict], tools: list[dict] | None = None,
-                 temperature: float = 0.0) -> dict:
+                 temperature: float = 0.0, attempts: int = 3) -> dict:
         body = {"model": self.model, "messages": messages, "temperature": temperature}
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
-        resp = requests.post(OPENROUTER, timeout=self.timeout,
-                             headers={"Authorization": "Bearer " + self.api_key,
-                                      "Content-Type": "application/json"},
-                             json=body)
-        if resp.status_code != 200:
-            raise RuntimeError("model call failed: %s %s" % (resp.status_code, resp.text[:300]))
-        out = resp.json()
-        self.calls += 1
-        usage = out.get("usage") or {}
-        self.prompt_tokens += usage.get("prompt_tokens", 0)
-        self.completion_tokens += usage.get("completion_tokens", 0)
-        return out["choices"][0]["message"]
+        last = ""
+        for attempt in range(attempts):
+            resp = requests.post(OPENROUTER, timeout=self.timeout,
+                                 headers={"Authorization": "Bearer " + self.api_key,
+                                          "Content-Type": "application/json"},
+                                 json=body)
+            if resp.status_code == 200:
+                out = resp.json()
+                self.calls += 1
+                usage = out.get("usage") or {}
+                self.prompt_tokens += usage.get("prompt_tokens", 0)
+                self.completion_tokens += usage.get("completion_tokens", 0)
+                return out["choices"][0]["message"]
+            last = "%s %s" % (resp.status_code, resp.text[:200])
+            # A gateway in the path will occasionally answer 429 or 502 for a
+            # request that is perfectly good. Losing a whole persona to that
+            # would make the evals report a failure the code did not have.
+            if resp.status_code not in (408, 409, 425, 429, 500, 502, 503, 504):
+                break
+            time.sleep(2 * (attempt + 1))
+        raise RuntimeError("model call failed: %s" % last)
 
     def stats(self) -> dict:
         return {"model": self.model, "calls": self.calls,

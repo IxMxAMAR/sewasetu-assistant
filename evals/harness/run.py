@@ -100,7 +100,7 @@ def describe(exc: BaseException) -> str:
 
 
 async def run_persona(persona: dict, args, signin: SignIn, portal: Portal,
-                      snapshot: dict, run_started, assistant: Model,
+                      snapshot: dict, marks: dict, assistant: Model,
                       citizen: Model, log=print) -> dict:
     record = {
         "id": persona["id"], "who": persona["who"], "role": persona["role"],
@@ -139,7 +139,7 @@ async def run_persona(persona: dict, args, signin: SignIn, portal: Portal,
         log("  FAILED: %s" % record["error"])
 
     for check in persona.get("checks", []):
-        outcome = evaluate(portal, check, record["transcript"], snapshot, run_started)
+        outcome = evaluate(portal, check, record["transcript"], snapshot, marks)
         record["checks"].append(outcome)
         log("    %s %s -- %s" % ("PASS" if outcome["passed"] else "FAIL",
                                  outcome["check"], outcome["detail"]))
@@ -217,9 +217,10 @@ async def main_async(args) -> int:
     watched = [c["application_no"] for p in personas for c in p.get("checks", [])
                if c["check"] == "unchanged"]
     snapshot = portal.snapshot(watched)
-    # A minute of slack: the portal's clock and ours are both IST, but they are
-    # not the same process.
-    run_started = now_ist() - dt.timedelta(seconds=60)
+    # "Since this run started" is a row id, not a timestamp: the portal writes its
+    # timestamps with the container's clock and its rules with Asia/Kolkata, and
+    # those are not the same clock here.
+    marks = portal.watermark()
 
     api_key = os.environ.get("OPENROUTER_API_KEY", "")
     if not api_key:
@@ -234,7 +235,7 @@ async def main_async(args) -> int:
     for persona in personas:
         print("== %s (%s)" % (persona["id"], persona["who"]))
         results.append(await run_persona(persona, args, signin, portal, snapshot,
-                                         run_started, assistant, citizen))
+                                         marks, assistant, citizen))
         print("")
 
     checks = [c for r in results for c in r["checks"]]
